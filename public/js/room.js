@@ -147,7 +147,6 @@ let playerVideoReady = false;
 let playerSeekable = false;  // can actually seek (NEW)
 let activeVideoId  = null;
 let pendingVideoId = null;
-let pendingStartSeconds = 0;
 let pendingPlayerState = null;
 let pendingCatchupFlash = false;
 let pendingRetryTimer = null;  // retry backoff timer (NEW)
@@ -482,11 +481,9 @@ function handlePlayerError(event) {
 function maybeLoadPendingVideo() {
   if (!ytReady || !pendingVideoId) return;
 
-  const startAt = pendingStartSeconds || 0;
-
   if (!ytPlayer) {
     activeVideoId = pendingVideoId;
-    logSync(`[INIT-PLAYER] Creating YouTube player for ${activeVideoId} at ${startAt.toFixed(1)}s`);
+    logSync(`[INIT-PLAYER] Creating YouTube player for ${activeVideoId}`);
     ytPlayer = new window.YT.Player('video-frame', {
       width: '100%',
       height: '100%',
@@ -498,7 +495,6 @@ function maybeLoadPendingVideo() {
         disablekb: 1,
         modestbranding: 1,
         playsinline: 1,
-        start: Math.floor(startAt),
         origin: location.origin,
       },
       events: {
@@ -516,35 +512,34 @@ function maybeLoadPendingVideo() {
   pendingVideoId = null;
   playerVideoReady = false;
   playerSeekable = false;
-  logSync(`[CUE-VIDEO] Cueing ${activeVideoId} at ${startAt.toFixed(1)}s`);
+  logSync(`[CUE-VIDEO] Cueing ${activeVideoId}`);
 
   try {
     ytPlayer.cueVideoById({
       videoId: activeVideoId,
-      startSeconds: startAt,
+      startSeconds: 0,
     });
   } catch (err) {
     logSync(`[ERROR] Failed to cue video: ${err.message}`);
   }
 }
 
-function createPlayer(videoUrl, startSeconds = 0) {
+function createPlayer(videoUrl) {
   const videoId = extractYouTubeVideoId(videoUrl);
   if (!videoId) {
     toast('Only YouTube videos are supported right now.', 'error');
     return false;
   }
 
-  logSync(`[CREATE-PLAYER] Loading video ${videoId} startSeconds=${startSeconds}`);
+  logSync(`[CREATE-PLAYER] Loading video ${videoId}`);
   emptyState.classList.add('hidden');
   videoShell.classList.remove('hidden');
   endedReportedForCurrentVideo = false;
   playerVideoReady = false;
   playerSeekable = false;
   pendingVideoId = videoId;
-  pendingStartSeconds = startSeconds;
   activeVideoId = videoId;
-  lastPolledPosition = startSeconds;
+  lastPolledPosition = 0;
   lastPollTs = Date.now();
   lastBroadcastSeekAt = 0;
   lastIdleCheckAt = Date.now();
@@ -750,7 +745,7 @@ function handleMessage(msg) {
       localPosition = msg.position ?? 0;
       localStatus   = msg.status   ?? 'paused';
       if (msg.url) {
-        if (createPlayer(msg.url, localPosition)) {
+        if (createPlayer(msg.url)) {
           queuePlayerState(
             { position: localPosition, status: localStatus },
             { showCatchupFlash: true }
